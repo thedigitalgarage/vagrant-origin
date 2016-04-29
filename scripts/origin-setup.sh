@@ -40,131 +40,148 @@ __build_images=$6
 __version="latest"
 __MASTER_CONFIG="${__CONFIG_DIR}/openshift.local.config/master/master-config.yaml"
 # Using http instead of https for allowing to local cache with squid for faster provisionings
-__REPO="http://github.com/${__origin_repo}/origin.git"
+__REPO="https://github.com/${__origin_repo}/origin.git"
 
 [ ! -z ${FORCE_ORIGIN} ] && echo "[INFO] Forcing reinstallation of things" && rm ${__TESTS_DIR}/${__base}.*.configured
 
 # Clean
 clean_source(){
-# Delete the Origin repository previously checked out
-rm -rf ${__BUILD_DIR}
+  # Delete the Origin repository previously checked out
+  rm -rf ${__BUILD_DIR}
 }
 
 # Clean
 clean_target(){
-# Delete the Origin repository previously checked out
-rm -rf ${__BUILD_DIR}/origin/_output
-rm -rf ${__CONFIG_DIR}/bin
+  # Delete the Origin repository previously checked out
+  rm -rf ${__BUILD_DIR}/origin/_output
+  rm -rf ${__CONFIG_DIR}/bin
 }
 
 clean_install(){
-echo "[INFO] Deleting old install"
-# Stop origin and delete all containers
-systemctl stop origin > /dev/null 2>&1
-sleep 3
-if [[ "$(docker ps -qa)" != "" ]]
-then
-docker stop $(docker ps -qa)
-docker rm -vf $(docker ps -qa)
-fi
+  echo "[INFO] Deleting old install"
+  # Stop origin and delete all containers
+  systemctl stop origin > /dev/null 2>&1
+  sleep 3
+  if [[ "$(docker ps -qa)" != "" ]]
+  then
+  docker stop $(docker ps -qa)
+  docker rm -vf $(docker ps -qa)
+  fi
 
-systemctl stop docker
-# Hack to delete secret volumes in use
-cat /etc/mtab | grep kubernetes | awk '{ print $2}' | xargs umount > /dev/null 2>&1
+  systemctl stop docker
+  # Hack to delete secret volumes in use
+  cat /etc/mtab | grep kubernetes | awk '{ print $2}' | xargs umount > /dev/null 2>&1
 
-# Deleting previous configuration
-rm -rf ${__CONFIG_DIR}/openshift.local.*
-rm -rf ${__CONFIG_DIR}/tests/${__base}*
-rm -rf ${__CONFIG_DIR}/tests/addons_origin*
+  # Deleting previous configuration
+  rm -rf ${__CONFIG_DIR}/openshift.local.*
+  rm -rf ${__CONFIG_DIR}/tests/${__base}*
+  rm -rf ${__CONFIG_DIR}/tests/addons_origin*
 
-systemctl start docker
+  systemctl start docker
 }
 
 # Checkout
 __checkout(){
-echo "[INFO] No origin source, so let's checkout and build it"
-mkdir -p ${__BUILD_DIR}
+  echo "[INFO] No origin source, so let's checkout and build it"
+  mkdir -p ${__BUILD_DIR}
 
-pushd ${__BUILD_DIR}
-echo "[INFO] Cloning $__REPO at branch ${__origin_branch}"
-git clone ${__REPO} -b ${__origin_branch}
+  pushd ${__BUILD_DIR}
+  echo "[INFO] Cloning $__REPO to specified branch ${__origin_branch}"
 
-[ ! -d ${__BUILD_DIR}/origin ] && echo "[ERROR] There is no source to build. Check that the repo was properly checked out" && exit 1
-popd
+  git clone --single-branch --branch=${__origin_branch} ${__REPO}
+  [ "$?" -ne 0 ] && echo "[ERROR] Error cloning the repository" && exit 1
+
+  [ ! -d ${__BUILD_DIR}/origin ] && echo "[ERROR] There is no source to build. Check that the repo was properly checked out" && exit 1
+  popd
 }
 
 # Update
 __update(){
-pushd ${__BUILD_DIR}/origin
-echo "[INFO] Updating to latest"
-git pull
-popd
+  pushd ${__BUILD_DIR}/origin
+  echo "[INFO] Updating to latest"
+  git pull
+  popd
 }
 
 build(){
-export GOPATH=/go
-export PATH=$PATH:$GOPATH/bin
+  export GOPATH=/go
+  export PATH=$PATH:$GOPATH/bin
 
-# If source is there we update
-if [ -e ${__BUILD_DIR}/origin ]
-then
-__update
-else
-# else we checkout
-__checkout
-fi
+  # If source is there we update
+  if [ -e ${__BUILD_DIR}/origin ]
+  then
+    __update
+  else
+    # else we checkout
+    __checkout
+  fi
 
-[ ! -d ${__BUILD_DIR}/origin ] && echo "[ERROR] There is no source to build. Check that the repo was properly checked out" && exit 1
+  [ ! -d ${__BUILD_DIR}/origin ] && echo "[ERROR] There is no source to build. Check that the repo was properly checked out" && exit 1
 
-if [ ! -d ${__BUILD_DIR}/origin/_output ]
-then
-# We build
-cd ${__BUILD_DIR}/origin
-hack/build-go.sh
-# TODO: Test this
-if [ "${__build_images}" = "true" ]
-then
-hack/build-base-images.sh
-hack/build-release.sh
-hack/build-images.sh
-__version=$(git rev-parse --short "HEAD^{commit}" 2>/dev/null)
-fi
+  if [ ! -d ${__BUILD_DIR}/origin/_output ]
+  then
+    # We build
+    cd ${__BUILD_DIR}/origin
+    hack/build-go.sh
+    # TODO: Test this
+    if [ "${__build_images}" = "true" ]
+    then
+      hack/build-base-images.sh
+      hack/build-release.sh
+      hack/build-images.sh
+      __version=$(git rev-parse --short "HEAD^{commit}" 2>/dev/null)
+    fi
 
-# We copy the binaries into the <CONFIG_DIR>/bin and then link them
-mkdir -p ${__CONFIG_DIR}/bin
-pushd ${__BUILD_DIR}/origin/_output/local/bin/linux/amd64/
-for i in `ls *`; do cp -f ${i} ${__CONFIG_DIR}/bin; ln -s ${__CONFIG_DIR}/bin/${i} /usr/bin/ > /dev/null 2>&1; done
-popd
-fi
+    # We copy the binaries into the <CONFIG_DIR>/bin and then link them
+    mkdir -p ${__CONFIG_DIR}/bin
+    pushd ${__BUILD_DIR}/origin/_output/local/bin/linux/amd64/
+    for i in `ls *`
+    do 
+      cp -f ${i} ${__CONFIG_DIR}/bin
+      ln -s ${__CONFIG_DIR}/bin/${i} /usr/bin/ > /dev/null 2>&1
+    done
+    popd
+
+    # Add bash completions
+    mkdir -p ${__CONFIG_DIR}/bin/bash
+    pushd ${__BUILD_DIR}/origin/contrib/completions/bash/
+    for i in `ls *`
+    do
+      cp -f ${i} ${__CONFIG_DIR}/bin/bash
+      ln -s ${__CONFIG_DIR}/bin/bash/${i} /etc/bash_completion.d/ > /dev/null 2>&1
+    done  
+
+    popd
+  fi
 }
 
 config(){
-[ -e ${__MASTER_CONFIG} ] && return 0
-echo "[INFO] Using images version ${__version}"
+  [ -e ${__MASTER_CONFIG} ] && return 0
+  echo "[INFO] Using images version ${__version}"
 
-echo "export CONFIG_DIR=${__CONFIG_DIR}" > /etc/profile.d/openshift.sh
-echo "export MASTER_DIR=${__CONFIG_DIR}/openshift.local.config/master" >> /etc/profile.d/openshift.sh
-echo "export KUBECONFIG=${__CONFIG_DIR}/openshift.local.config/master/admin.kubeconfig" >> /etc/profile.d/openshift.sh
-echo "export MASTER_CONFIG=${__MASTER_CONFIG}" >> /etc/profile.d/openshift.sh
+  echo "export CONFIG_DIR=${__CONFIG_DIR}" > /etc/profile.d/openshift.sh
+  echo "export MASTER_DIR=${__CONFIG_DIR}/openshift.local.config/master" >> /etc/profile.d/openshift.sh
+  echo "export KUBECONFIG=${__CONFIG_DIR}/openshift.local.config/master/admin.kubeconfig" >> /etc/profile.d/openshift.sh
+  echo "export MASTER_CONFIG=${__MASTER_CONFIG}" >> /etc/profile.d/openshift.sh
 
 
-# TODO: Fix permissions for openshift.local.config, openshift.local.etcd, openshift.local.volumes
-# Create initial configuration for Origin
-openshift start --public-master=${__public_address} \
-    --master=${__public_address} \
-    --etcd-dir=${__CONFIG_DIR}/openshift.local.etcd \
-    --write-config=${__CONFIG_DIR}/openshift.local.config \
-    --volume-dir=${__CONFIG_DIR}/openshift.local.volumes \
-    --images='openshift/origin-${component}:'${__version}
+  # TODO: Fix permissions for openshift.local.config, openshift.local.etcd, openshift.local.volumes
+  # Create initial configuration for Origin
+  openshift start --public-master=${__public_address} \
+      --master=${__public_address} \
+      --etcd-dir=${__CONFIG_DIR}/openshift.local.etcd \
+      --write-config=${__CONFIG_DIR}/openshift.local.config \
+      --volume-dir=${__CONFIG_DIR}/openshift.local.volumes \
+      --images='openshift/origin-${component}:'${__version}
 
-chmod 666 ${__CONFIG_DIR}/openshift.local.config/master/*
+  chmod 666 ${__CONFIG_DIR}/openshift.local.config/master/*
 
-# Now we need to make some adjustments to the config
-sed -i.orig -e "s/\(.*subdomain:\).*/\1 ${__public_hostname}/" ${__MASTER_CONFIG}
-# This options below should not be needed, as openshift-start is handling these
-#  -e "s/\(.*masterPublicURL:\).*/\1 https:\/\/${__public_address}:8443/g" \
-#  -e "s/\(.*publicURL:\).*/\1 https:\/\/${__public_address}:8443\/console\//g" \
-#  -e "s/\(.*assetPublicURL:\).*/\1 https:\/\/${__public_address}:8443\/console\//g"
+  # Now we need to make some adjustments to the config
+  sed -i.orig -e "s/\(.*subdomain:\).*/\1 ${__public_hostname}/" ${__MASTER_CONFIG}
+  # This options below should not be needed, as openshift-start is handling these
+  #  -e "s/\(.*masterPublicURL:\).*/\1 https:\/\/${__public_address}:8443/g" \
+  #  -e "s/\(.*publicURL:\).*/\1 https:\/\/${__public_address}:8443\/console\//g" \
+  #  -e "s/\(.*assetPublicURL:\).*/\1 https:\/\/${__public_address}:8443\/console\//g"
 
   [ ! -d ${__CONFIG_DIR}/openshift.local.config/master ] && echo "[ERROR] There is no master config dir available at ${__CONFIG_DIR}/openshift.local.config/master" && exit 1
   # NOTE: If node name gets configurable, change this check and service file below
@@ -185,6 +202,7 @@ sed -i.orig -e "s/\(.*subdomain:\).*/\1 ${__public_hostname}/" ${__MASTER_CONFIG
   WantedBy=multi-user.target
 EOF
   systemctl enable origin
+
 }
 
 add_resources() {
@@ -197,14 +215,14 @@ add_resources() {
     chmod 777 /opt/registry
 
     oc create serviceaccount registry -n default
-    oadm policy add-scc-to-user privileged system:serviceaccount:default:registry
-    oadm registry --service-account=registry \
-                  --config=${__CONFIG_DIR}/openshift.local.config/master/admin.kubeconfig \
-                  --credentials=${__CONFIG_DIR}/openshift.local.config/master/openshift-registry.kubeconfig \
-                  --mount-host=/opt/registry
+    oc adm policy add-scc-to-user privileged system:serviceaccount:default:registry
+    oc adm registry --service-account=registry \
+                    --config=${__CONFIG_DIR}/openshift.local.config/master/admin.kubeconfig \
+                    --credentials=${__CONFIG_DIR}/openshift.local.config/master/openshift-registry.kubeconfig \
+                    --mount-host=/opt/registry
 
-# TODO: Remove, as the configuration in 1.2 has changed to what can be seen up
-#    oadm registry --create --credentials=${__CONFIG_DIR}/openshift.local.config/master/openshift-registry.kubeconfig
+    # TODO: Remove, as the configuration in 1.2 has changed to what can be seen up
+    #    oc adm registry --create --credentials=${__CONFIG_DIR}/openshift.local.config/master/openshift-registry.kubeconfig
 
     # TODO: Secure the registry (https://docs.openshift.org/latest/install_config/install/docker_registry.html)
     oc expose service docker-registry --hostname "hub.${__public_address}"
@@ -217,11 +235,11 @@ add_resources() {
   if [ ! -f ${__CONFIG_DIR}/tests/${__base}.router.configured ]; then
     echo "[INFO] Creating the OpenShift Router"
     ## Add Router Service Account to default namespace
-    echo '{"kind":"ServiceAccount","apiVersion":"v1","metadata":{"name":"router","namespace":"default"}}' | oc create -f -
+    oc create serviceaccount router -n default
     ## Add router ServiceAccount to privileged SCC
-    oc get scc privileged -o json  | sed '/\"users\"/a \"system:serviceaccount:default:router\",' | oc replace scc privileged -f -
+    oc adm policy add-scc-to-user privileged system:serviceaccount:default:router
     ## Create the router
-    oadm router --create --credentials=${__CONFIG_DIR}/openshift.local.config/master/openshift-router.kubeconfig --service-account=router
+    oc adm router --create --credentials=${__CONFIG_DIR}/openshift.local.config/master/openshift-router.kubeconfig --service-account=router
 
     touch ${__CONFIG_DIR}/tests/${__base}.router.configured
   fi
@@ -230,7 +248,7 @@ add_resources() {
   if [ ! -f ${__CONFIG_DIR}/tests/${__base}.users.configured ]; then
     echo "[INFO] Creating and configuring users"
     ## Add admin as a cluster-admin
-    oadm policy add-cluster-role-to-user cluster-admin admin
+    oc adm policy add-cluster-role-to-user cluster-admin admin
 
     touch ${__CONFIG_DIR}/tests/${__base}.users.configured
   fi
@@ -239,7 +257,7 @@ add_resources() {
   if [ ! -f ${__CONFIG_DIR}/tests/${__base}.anyuid.configured ]; then
     echo "[INFO] Creating and configuring users"
     ## Add admin as a cluster-admin
-    oadm policy add-scc-to-group anyuid system:authenticated
+    oc adm policy add-scc-to-group anyuid system:authenticated
 
     touch ${__CONFIG_DIR}/tests/${__base}.anyuid.configured
   fi
@@ -253,20 +271,24 @@ add_resources() {
       ## SCL: Ruby 2, Ruby 2.2, Node.js 0.10, Perl 5.16, Perl 5.20, PHP 5.5, PHP 5.6, Python 3.4, Python 3.3, Python 2.7)
       ## Databases: Mysql 5.5, Mysql 5.6, PostgreSQL 9.2, PostgreSQL 9.4, Mongodb 2.4, Mongodb 2.6, Jenkins
       ## Wildfly 8.1
-      http://raw.githubusercontent.com/openshift/origin/master/examples/image-streams/image-streams-centos7.json
+      https://raw.githubusercontent.com/openshift/origin/master/examples/image-streams/image-streams-centos7.json
       # DB templates (Centos)
-      http://raw.githubusercontent.com/openshift/origin/master/examples/db-templates/mongodb-ephemeral-template.json
-      http://raw.githubusercontent.com/openshift/origin/master/examples/db-templates/mongodb-persistent-template.json
-      http://raw.githubusercontent.com/openshift/origin/master/examples/db-templates/mysql-ephemeral-template.json
-      http://raw.githubusercontent.com/openshift/origin/master/examples/db-templates/mysql-persistent-template.json
-      http://raw.githubusercontent.com/openshift/origin/master/examples/db-templates/postgresql-ephemeral-template.json
-      http://raw.githubusercontent.com/openshift/origin/master/examples/db-templates/postgresql-persistent-template.json
+      https://raw.githubusercontent.com/openshift/origin/master/examples/db-templates/mongodb-ephemeral-template.json
+      https://raw.githubusercontent.com/openshift/origin/master/examples/db-templates/mongodb-persistent-template.json
+      https://raw.githubusercontent.com/openshift/origin/master/examples/db-templates/mysql-ephemeral-template.json
+      https://raw.githubusercontent.com/openshift/origin/master/examples/db-templates/mysql-persistent-template.json
+      https://raw.githubusercontent.com/openshift/origin/master/examples/db-templates/postgresql-ephemeral-template.json
+      https://raw.githubusercontent.com/openshift/origin/master/examples/db-templates/postgresql-persistent-template.json
       # Jenkins (Centos)
-      http://raw.githubusercontent.com/openshift/origin/master/examples/jenkins/jenkins-ephemeral-template.json
-      http://raw.githubusercontent.com/openshift/origin/master/examples/jenkins/jenkins-persistent-template.json
+      https://raw.githubusercontent.com/openshift/origin/master/examples/jenkins/jenkins-ephemeral-template.json
+      https://raw.githubusercontent.com/openshift/origin/master/examples/jenkins/jenkins-persistent-template.json
       # Node.js (Centos)
-      http://raw.githubusercontent.com/openshift/nodejs-ex/master/openshift/templates/nodejs-mongodb.json
-      http://raw.githubusercontent.com/openshift/nodejs-ex/master/openshift/templates/nodejs.json
+      https://raw.githubusercontent.com/openshift/nodejs-ex/master/openshift/templates/nodejs-mongodb.json
+      https://raw.githubusercontent.com/openshift/nodejs-ex/master/openshift/templates/nodejs.json
+      ## NodeJS S2I image streams (recent releases not covered by SCL)
+      https://raw.githubusercontent.com/ryanj/origin-s2i-nodejs/master/image-streams.json
+      # Warpdrive-python
+      https://raw.githubusercontent.com/GrahamDumpleton/warpdrive/master/openshift/warpdrive-python.json
     )
 
     for template in ${template_list[@]}; do
@@ -304,30 +326,28 @@ add_resources() {
     # Enable the new exports without bouncing the NFS service
     exportfs -a
 
-    echo "[INFO] Creating 5 NFS PV {pv01..05} using from 1Gi to 5Gi in ReadWriteMany or ReadWriteOnly mode and Recycle Policy."
-    for i in {1..5}
+    echo "[INFO] Creating 10 NFS PV {pv01..10} using from 10Gi in ReadWriteMany or ReadWriteOnly mode and Recycle Policy."
+    for i in {01..10}
     do
     cat <<-EOF > /tmp/pv.yaml
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: pv0${i}
+  name: pv${i}
 spec:
   capacity:
-    storage: ${i}Gi
+    storage: 10Gi
   accessModes:
     - ReadWriteOnce
     - ReadWriteMany
   persistentVolumeReclaimPolicy: Recycle
   nfs:
     server: localhost
-    path: /nfsvolumes/pv0${i}
+    path: /nfsvolumes/pv${i}
 EOF
-    # Create 5 volumes from 1Gi to 5 Gi
+    # Create 10 volumes of 10Gi
     oc create -f /tmp/pv.yaml
     done
-    
-    echo "[INFO] There is 5 NFS shares available to be created as volumes {06..10}. See /scripts/nfs-pv for examples"
 
     touch ${__CONFIG_DIR}/tests/${__base}.nfs.configured
   fi
@@ -337,7 +357,7 @@ EOF
 #    echo "[INFO] Creating sample app"
     ## Add admin as a cluster-admin
 #    oc new-project turbo --display-name="Turbo Sample" --description="This is an example project to demonstrate OpenShift v3"
-#    oc process -f http://raw.githubusercontent.com/openshift/origin/master/examples/sample-app/application-template-stibuild.json | oc create -n turbo -f -
+#    oc process -f https://raw.githubusercontent.com/openshift/origin/master/examples/sample-app/application-template-stibuild.json | oc create -n turbo -f -
     # curl -skL -w "%{http_code} %{url_effective}\\n" -o /tmp/output -H 'Host: www.example.com' https://localhost:443
 
 #    touch ${__CONFIG_DIR}/tests/${__base}.sample.configured
