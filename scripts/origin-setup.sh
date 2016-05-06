@@ -293,8 +293,8 @@ add_resources() {
       # Warpdrive-python
       https://raw.githubusercontent.com/GrahamDumpleton/warpdrive/master/openshift/warpdrive-python.json
       # JBOSS
-      https://raw.githubusercontent.com/thedigitalgarage/application-templates/jboss-image-streams.json
-      https://raw.githubusercontent.com/thedigitalgarage/application-templates/webserver/jws-tomcat7-basic-s2i.json
+      https://raw.githubusercontent.com/thedigitalgarage/application-templates/master/jboss-image-streams.json
+      https://raw.githubusercontent.com/thedigitalgarage/application-templates/master/webserver/jws-tomcat7-basic-s2i.json
     )
 
     for template in ${template_list[@]}; do
