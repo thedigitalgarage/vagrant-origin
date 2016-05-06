@@ -136,7 +136,7 @@ build(){
     mkdir -p ${__CONFIG_DIR}/bin
     pushd ${__BUILD_DIR}/origin/_output/local/bin/linux/amd64/
     for i in `ls *`
-    do 
+    do
       cp -f ${i} ${__CONFIG_DIR}/bin
       ln -s ${__CONFIG_DIR}/bin/${i} /usr/bin/ > /dev/null 2>&1
     done
@@ -149,7 +149,7 @@ build(){
     do
       cp -f ${i} ${__CONFIG_DIR}/bin/bash
       ln -s ${__CONFIG_DIR}/bin/bash/${i} /etc/bash_completion.d/ > /dev/null 2>&1
-    done  
+    done
 
     popd
   fi
@@ -283,12 +283,18 @@ add_resources() {
       https://raw.githubusercontent.com/openshift/origin/master/examples/jenkins/jenkins-ephemeral-template.json
       https://raw.githubusercontent.com/openshift/origin/master/examples/jenkins/jenkins-persistent-template.json
       # Node.js (Centos)
-      https://raw.githubusercontent.com/openshift/nodejs-ex/master/openshift/templates/nodejs-mongodb.json
-      https://raw.githubusercontent.com/openshift/nodejs-ex/master/openshift/templates/nodejs.json
+      https://raw.githubusercontent.com/thedigitalgarage/nodejs-ex/master/openshift/templates/nodejs-mongodb.json
+      https://raw.githubusercontent.com/thedigitalgarage/nodejs-ex/master/openshift/templates/nodejs.json
+      # Cakephp (Centos)
+      https://raw.githubusercontent.com/thedigitalgarage/cakephp-ex/master/openshift/templates/cakephp-mysql.json
+      https://raw.githubusercontent.com/thedigitalgarage/cakephp-ex/master/openshift/templates/cakephp.json
       ## NodeJS S2I image streams (recent releases not covered by SCL)
       https://raw.githubusercontent.com/ryanj/origin-s2i-nodejs/master/image-streams.json
       # Warpdrive-python
       https://raw.githubusercontent.com/GrahamDumpleton/warpdrive/master/openshift/warpdrive-python.json
+      # JBOSS
+      https://raw.githubusercontent.com/thedigitalgarage/application-templates/jboss-image-streams.json
+      https://raw.githubusercontent.com/thedigitalgarage/application-templates/webserver/jws-tomcat7-basic-s2i.json
     )
 
     for template in ${template_list[@]}; do
