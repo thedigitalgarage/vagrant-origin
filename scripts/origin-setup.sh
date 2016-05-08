@@ -27,6 +27,7 @@ __BUILD_DIR="/go/src/github.com/openshift"
 __CONFIG_DIR="/var/lib/origin"
 __TESTS_DIR=${__CONFIG_DIR}/tests
 __BIN_DIR=${__CONFIG_DIR}/bin
+__ASSETS_DIR=${__CONFIG_DIR}/assets
 
 mkdir -p ${__TESTS_DIR}
 
@@ -39,6 +40,7 @@ __build_images=$6
 
 __version="latest"
 __MASTER_CONFIG="${__CONFIG_DIR}/openshift.local.config/master/master-config.yaml"
+__login_template="${__ASSETS_DIR}/login.html"
 # Using http instead of https for allowing to local cache with squid for faster provisionings
 __REPO="https://github.com/${__origin_repo}/origin.git"
 
@@ -55,6 +57,7 @@ clean_target(){
   # Delete the Origin repository previously checked out
   rm -rf ${__BUILD_DIR}/origin/_output
   rm -rf ${__CONFIG_DIR}/bin
+  rm -rf ${__CONFIG_DIR}/assets
 }
 
 clean_install(){
@@ -150,7 +153,12 @@ build(){
       cp -f ${i} ${__CONFIG_DIR}/bin/bash
       ln -s ${__CONFIG_DIR}/bin/bash/${i} /etc/bash_completion.d/ > /dev/null 2>&1
     done
-
+    popd
+    
+    # Add HTML Assets
+    mkdir -p ${__ASSETS_DIR}
+    pushd ${__BUILD_DIR}/origin/assets/app
+    cp -f "login.html" ${__ASSETS_DIR}
     popd
   fi
 }
@@ -177,7 +185,7 @@ config(){
   chmod 666 ${__CONFIG_DIR}/openshift.local.config/master/*
 
   # Now we need to make some adjustments to the config
-  sed -i.orig -e "s/\(.*subdomain:\).*/\1 ${__public_hostname}/" ${__MASTER_CONFIG}
+  sed -i.orig -e "s/\(.*subdomain:\).*/\1 ${__public_hostname}/" -e "s/\(.*templates:\).*/\1 ${__login_template}/" ${__MASTER_CONFIG}
   # This options below should not be needed, as openshift-start is handling these
   #  -e "s/\(.*masterPublicURL:\).*/\1 https:\/\/${__public_address}:8443/g" \
   #  -e "s/\(.*publicURL:\).*/\1 https:\/\/${__public_address}:8443\/console\//g" \
