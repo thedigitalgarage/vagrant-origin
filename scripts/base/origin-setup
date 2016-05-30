@@ -14,24 +14,6 @@ __BUILD_DIR="/go/src/github.com/openshift"
 __CONFIG_DIR="/var/lib/origin"
 __TESTS_DIR=${__CONFIG_DIR}/tests
 __BIN_DIR=${__CONFIG_DIR}/bin
-<<<<<<< HEAD:scripts/origin-setup.sh
-__ASSETS_DIR=${__CONFIG_DIR}/assets
-
-mkdir -p ${__TESTS_DIR}
-
-__public_address=$1
-__public_hostname=$2
-__action=$3
-__origin_repo=$4
-__origin_branch=$5
-__build_images=$6
-
-__version="latest"
-__MASTER_CONFIG="${__CONFIG_DIR}/openshift.local.config/master/master-config.yaml"
-__login_template="${__ASSETS_DIR}/login.html"
-# Using http instead of https for allowing to local cache with squid for faster provisionings
-__REPO="https://github.com/${__origin_repo}/origin.git"
-=======
 # CONSTANTS
 export __VERSION=${__OS_IMAGES_VERSION}
 __MASTER_CONFIG="${__CONFIG_DIR}/openshift.local.config/master/master-config.yaml"
@@ -51,7 +33,6 @@ ORIGIN-Setup(){
    # Install Origin additional default resources
    ADD-Resources
 }
->>>>>>> openshift-evangelists/master:scripts/base/origin-setup
 
 
 # Clean
@@ -156,7 +137,7 @@ BUILD(){
       ln -s ${__CONFIG_DIR}/bin/bash/${i} /etc/bash_completion.d/ > /dev/null 2>&1
     done
     popd
-    
+
     # Add HTML Assets
     mkdir -p ${__ASSETS_DIR}
     pushd ${__BUILD_DIR}/origin/assets/app
@@ -194,15 +175,7 @@ CONFIG(){
   chmod 666 ${__CONFIG_DIR}/openshift.local.config/master/*
 
   # Now we need to make some adjustments to the config
-<<<<<<< HEAD:scripts/origin-setup.sh
-  sed -i.orig -e "s/\(.*subdomain:\).*/\1 ${__public_hostname}/" -e "s/\(.*templates:\).*/\1 ${__login_template}/" ${__MASTER_CONFIG}
-  # This options below should not be needed, as openshift-start is handling these
-  #  -e "s/\(.*masterPublicURL:\).*/\1 https:\/\/${__public_address}:8443/g" \
-  #  -e "s/\(.*publicURL:\).*/\1 https:\/\/${__public_address}:8443\/console\//g" \
-  #  -e "s/\(.*assetPublicURL:\).*/\1 https:\/\/${__public_address}:8443\/console\//g"
-=======
   sed -i.orig -e "s/\(.*subdomain:\).*/\1 ${__OS_APPS_DOMAIN}/" ${__MASTER_CONFIG}
->>>>>>> openshift-evangelists/master:scripts/base/origin-setup
 
   [ ! -d ${__CONFIG_DIR}/openshift.local.config/master ] && echo "[ERROR] There is no master config dir available at ${__CONFIG_DIR}/openshift.local.config/master" && exit 1
   # NOTE: If node name gets configurable, change this check and service file below
@@ -244,7 +217,7 @@ registry-setup(){
     echo "[INFO] Registry is accesible in hub.${__OS_PUBLIC_IP}"
 
     marker_create "origin.registry"
-  fi   
+  fi
 }
 
 router-setup(){
@@ -256,7 +229,7 @@ router-setup(){
     oc adm router --create --service-account=router
 
     marker_create "origin.router"
-  fi   
+  fi
 }
 
 users-setup(){
@@ -356,13 +329,13 @@ nfs-setup(){
     systemctl enable rpcbind nfs-server
 
     # Activating and simlinking script
-    chmod 755 /scripts/nfs/create-nfs-volume 
+    chmod 755 /scripts/nfs/create-nfs-volume
     ln -s /scripts/nfs/create-nfs-volume /usr/local/bin/create-nfs-volume
-    
+
     echo "[INFO] Creating 10 NFS PV"
     for i in {01..10}
     do
-       /scripts/nfs/create-nfs-volume "pv${i}"  
+       /scripts/nfs/create-nfs-volume "pv${i}"
     done
 
     marker_create "origin.nfs"
@@ -375,7 +348,7 @@ ADD-Resources() {
 
    registry-setup
    router-setup
-   users-setup 
+   users-setup
    anyuid-setup
    cockpit-setup
    templates-setup
