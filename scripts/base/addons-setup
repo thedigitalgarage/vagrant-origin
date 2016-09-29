@@ -18,7 +18,7 @@ osetemplates-setup(){
      template_list=(
        ## SCL: Ruby 2, Ruby 2.2, Node.js 0.10, Perl 5.16, Perl 5.20, PHP 5.5, PHP 5.6, Python 3.4, Python 3.3, Python 2.7)
        ## Databases: Mysql 5.5, Mysql 5.6, PostgreSQL 9.2, PostgreSQL 9.4, Mongodb 2.4, Mongodb 2.6, Jenkins
-       https://raw.githubusercontent.com/openshift/origin/master/examples/image-streams/image-streams-rhel7.json    
+       https://raw.githubusercontent.com/openshift/origin/master/examples/image-streams/image-streams-rhel7.json
      )
      for template in ${template_list[@]}; do
          echo "[INFO] Importing template ${template}"
@@ -41,7 +41,7 @@ xpaastemplates-setup(){
      template_list=(
        ## SCL: Ruby 2, Ruby 2.2, Node.js 0.10, Perl 5.16, Perl 5.20, PHP 5.5, PHP 5.6, Python 3.4, Python 3.3, Python 2.7)
        ## Databases: Mysql 5.5, Mysql 5.6, PostgreSQL 9.2, PostgreSQL 9.4, Mongodb 2.4, Mongodb 2.6, Jenkins
-       https://raw.githubusercontent.com/openshift/origin/master/examples/image-streams/image-streams-rhel7.json    
+       https://raw.githubusercontent.com/openshift/origin/master/examples/image-streams/image-streams-rhel7.json
        ## JBoss Image streams(JWS, EAP, JDG, BRMS, AMQ)
        https://raw.githubusercontent.com/jboss-openshift/application-templates/${__OS_XPAAS_TAG}/jboss-image-streams.json
        ## Fuse Image Streams
@@ -89,27 +89,27 @@ metrics-setup(){
    if [ -f ${__TESTS_DIR}/addons.metrics.wanted ]; then
      if [ ! -f ${__TESTS_DIR}/addons.metrics.configured ]; then
        echo "[INFO] Creating and configuring metrics"
-      
+
        oc create -f https://raw.githubusercontent.com/openshift/origin-metrics/master/metrics-deployer-setup.yaml -n openshift-infra
        oc adm policy add-role-to-user edit system:serviceaccount:openshift-infra:metrics-deployer -n openshift-infra
        oc adm policy add-cluster-role-to-user cluster-reader system:serviceaccount:openshift-infra:heapster -n openshift-infra
        oc secrets new metrics-deployer nothing=/dev/null -n openshift-infra
-       # This file is placed in /scripts in the VM by Vagrant. If you change, adapt the path. 
+       # This file is placed in /scripts in the VM by Vagrant. If you change, adapt the path.
        oc process -f /scripts/metrics/metrics.yaml -v HAWKULAR_METRICS_HOSTNAME=hawkular-metrics.${__OS_APPS_DOMAIN},USE_PERSISTENT_STORAGE=false,IMAGE_VERSION=${__VERSION} | oc create -n openshift-infra -f -
        # Add metricsPublicURL to master-config
        sed -i.orig -e "s/\(.*metricsPublicURL:\).*/\1 https:\/\/hawkular-metrics.${__OS_APPS_DOMAIN}\/hawkular\/metrics/g" ${__MASTER_CONFIG}
        systemctl restart origin
-       
+
        # Add capabilities to enable/disable metrics to every authenticated user
        oc create -f /scripts/metrics/allinone-metrics-scaler-clusterrole.json
        oc adm policy add-role-to-group allinone:metrics-scaler system:authenticated -n openshift-infra
 
        echo "[INFO] Installing disable-metrics script"
        chmod 755 /scripts/metrics/disable-metrics
-       ln -s /scripts/metrics/disable-metrics /usr/local/bin/disable-metrics 
+       ln -s /scripts/metrics/disable-metrics /usr/local/bin/disable-metrics
        echo "[INFO] Installing enable-metrics script"
        chmod 755 /scripts/metrics/enable-metrics
-       ln -s /scripts/metrics/enable-metrics /usr/local/bin/enable-metrics 
+       ln -s /scripts/metrics/enable-metrics /usr/local/bin/enable-metrics
 
        echo ""
        echo "[INFO] Please visit https:\/\/hawkular-metrics.${__OS_APPS_DOMAIN} and accept the ssl certificate for the metrics to work"
@@ -150,7 +150,7 @@ logging-setup(){
        oc label nodes --all logging-infra-fluentd=true
 
        sed -i.orig -e "s/\(.*loggingPublicURL:\).*/\1 \"https:\/\/kibana.${__OS_APPS_DOMAIN}\"/" ${__MASTER_CONFIG}
-       
+
        systemctl restart origin
 
        # Wait for startup
@@ -165,10 +165,10 @@ logging-setup(){
 
        echo "[INFO] Installing disable-logging script"
        chmod 755 /scripts/logging/disable-logging
-       ln -s /scripts/logging/disable-logging /usr/local/bin/disable-logging 
+       ln -s /scripts/logging/disable-logging /usr/local/bin/disable-logging
        echo "[INFO] Installing enable-logging script"
        chmod 755 /scripts/logging/enable-logging
-       ln -s /scripts/logging/enable-logging /usr/local/bin/enable-logging 
+       ln -s /scripts/logging/enable-logging /usr/local/bin/enable-logging
 
        touch ${__TESTS_DIR}/addons.logging.configured
      fi
@@ -182,7 +182,7 @@ testusers-setup(){
    if [ -f ${__TESTS_DIR}/addons.testusers.wanted ]; then
      if [ ! -f ${__TESTS_DIR}/addons.testusers.configured ]; then
        echo "[INFO] Creating and configuring test users"
-      
+
        useradd -m -N -g vagrant dev;  echo dev  | passwd dev --stdin
        # TODO: Add .kube profile with the user logged in
        echo "[INFO] User dev created"
@@ -193,7 +193,7 @@ testusers-setup(){
 
        touch ${__TESTS_DIR}/addons.testusers.configured
      fi
-      
+
      rm ${__TESTS_DIR}/addons.testusers.wanted
    fi
 }
@@ -201,22 +201,22 @@ testusers-setup(){
 origin-images-setup(){
    origin_image_list=(
          # Origin images
-         docker.io/openshift/origin-deployer:latest
-         docker.io/openshift/origin-docker-registry:latest
-         docker.io/openshift/origin-haproxy-router:latest
-         docker.io/openshift/origin-pod:latest
-         docker.io/openshift/origin-sti-builder:latest 
-         docker.io/openshift/origin-docker-builder:latest
+         docker.io/openshift/origin-deployer:${__OS_IMAGES_VERSION}
+         docker.io/openshift/origin-docker-registry:${__OS_IMAGES_VERSION}
+         docker.io/openshift/origin-haproxy-router:${__OS_IMAGES_VERSION}
+         docker.io/openshift/origin-pod:${__OS_IMAGES_VERSION}
+         docker.io/openshift/origin-sti-builder:${__OS_IMAGES_VERSION}
+         docker.io/openshift/origin-docker-builder:${__OS_IMAGES_VERSION}
          # docker.io/openshift/origin-custom-docker-builder:latest
-         docker.io/openshift/origin-gitserver:latest
+         docker.io/openshift/origin-gitserver:${__OS_IMAGES_VERSION}
          # docker.io/openshift/origin-f5-router:latest
          # docker.io/openshift/origin-keepalived-ipfailover:latest
-         docker.io/openshift/origin-recycler:latest
+         docker.io/openshift/origin-recycler:${__OS_IMAGES_VERSION}
          # Metrics
-         docker.io/openshift/origin-metrics-deployer:latest
-         docker.io/openshift/origin-metrics-hawkular-metrics:latest
-         docker.io/openshift/origin-metrics-heapster:latest
-         docker.io/openshift/origin-metrics-cassandra:latest
+         docker.io/openshift/origin-metrics-deployer:${__OS_IMAGES_VERSION}
+         docker.io/openshift/origin-metrics-hawkular-metrics:${__OS_IMAGES_VERSION}
+         docker.io/openshift/origin-metrics-heapster:${__OS_IMAGES_VERSION}
+         docker.io/openshift/origin-metrics-cassandra:${__OS_IMAGES_VERSION}
    )
    # Pull down images
    if [ -f ${__TESTS_DIR}/addons.originimages.wanted ]
@@ -229,7 +229,7 @@ origin-images-setup(){
           docker pull $image
        done
        touch ${__TESTS_DIR}/addons.originimages.configured
-     fi 
+     fi
      rm ${__TESTS_DIR}/addons.originimages.wanted
    fi
 }
@@ -262,7 +262,7 @@ centos-images-setup(){
      fi
      rm ${__TESTS_DIR}/addons.centosimages.wanted
    fi
-}   
+}
 
 rhel-images-setup(){
    rhel_image_list=(
@@ -289,7 +289,7 @@ rhel-images-setup(){
           docker pull $image
        done
        touch ${__TESTS_DIR}/addons.rhelimages.configured
-     fi  
+     fi
      rm ${__TESTS_DIR}/addons.rhelimages.wanted
    fi
 }
@@ -356,7 +356,7 @@ ADDONS-Setup(){
    do
       touch ${__TESTS_DIR}/addons.${x}.wanted
    done
-   
+
    osetemplates-setup
 
    metrics-setup

@@ -137,12 +137,6 @@ BUILD(){
       ln -s ${__CONFIG_DIR}/bin/bash/${i} /etc/bash_completion.d/ > /dev/null 2>&1
     done
     popd
-
-    # Add HTML Assets
-    mkdir -p ${__ASSETS_DIR}
-    pushd ${__BUILD_DIR}/origin/assets/app
-    cp -f "login.html" ${__ASSETS_DIR}
-    popd
   fi
 }
 
