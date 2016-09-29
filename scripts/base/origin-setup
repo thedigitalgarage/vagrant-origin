@@ -21,13 +21,21 @@ __REPO="https://github.com/${__OS_ORIGIN_REPO}/origin.git"
 ##################################
 
 ORIGIN-Setup(){
-   # We clean what we want to redo
-   [ "${__OS_ACTION}" = "clean" ]  && clean_source && clean_install
-   [ "${__OS_ACTION}" = "build" ]  && clean_target && clean_install
-   [ "${__OS_ACTION}" = "config" ] && clean_install
 
-   # This will build
-   BUILD
+   # Modify workflow to install a release or build from source_code
+   if [ "${__OS_ACTION}" == "release" ]
+   then
+     DOWNLOAD-AND-INSTALL-release
+   else
+     # We clean what we want to redo
+     [ "${__OS_ACTION}" = "clean" ]  && clean_source && clean_install
+     [ "${__OS_ACTION}" = "build" ]  && clean_target && clean_install
+     [ "${__OS_ACTION}" = "config" ] && clean_install
+
+     # This will build
+     BUILD
+   fi
+
    # This will configure openshift
    CONFIG
    # Install Origin additional default resources
@@ -108,12 +116,12 @@ BUILD(){
   then
     # We build
     cd ${__BUILD_DIR}/origin
-    hack/build-go.sh
+    OS_ONLY_BUILD_PLATFORMS=${__OS_ONLY_BUILD_PLATFORMS-} hack/build-go.sh
     # TODO: Test this
     if [ "${__OS_BUILD_IMAGES}" = "true" ]
     then
       hack/build-base-images.sh
-      hack/build-release.sh
+      OS_ONLY_BUILD_PLATFORMS=${__OS_ONLY_BUILD_PLATFORMS-} hack/build-release.sh
       hack/build-images.sh
       export __VERSION=$(git rev-parse --short "HEAD^{commit}" 2>/dev/null)
     fi
@@ -138,6 +146,69 @@ BUILD(){
     done
     popd
   fi
+}
+
+DOWNLOAD-AND-INSTALL-release(){
+    # Validate that options are ok, and that requirements are met
+    # Download release info
+    curl -skL https://api.github.com/repos/${__OS_ORIGIN_REPO}/origin/releases/tags/${__OS_ORIGIN_BRANCH} -o /tmp/origin-release.json
+    if [[  $(cat /tmp/origin-release.json | jq '.message') == "\"Not Found\"" ]]
+    then
+      echo "[ERROR] Release ${__OS_ORIGIN_BRANCH} not found. Instllation will exit now" && exit 1
+    else
+      echo "[INFO] Release found"
+    fi
+    # Download the release and extract
+    cat /tmp/origin-release.json | jq '.assets[].browser_download_url' | grep "server" | sed -e 's/^"//'  -e 's/"$//' | xargs curl -kL -o /tmp/origin.tar.gz
+    [ ! -f /tmp/origin.tar.gz ] && "[ERROR] File not found" && exit 1
+
+    mkdir -p /tmp/origin
+    tar -xvzf /tmp/origin.tar.gz -C /tmp/origin
+
+    # We use for images the same version as for release
+    export __VERSION=${__OS_ORIGIN_BRANCH}
+
+    # We copy the binaries into the <CONFIG_DIR>/bin and then link them
+    mkdir -p ${__CONFIG_DIR}/bin
+    __dir=$(find /tmp/origin -name "*origin-server*")
+    # Add source-to-image
+    curl -skL https://github.com/openshift/source-to-image/releases/download/v1.1.0/source-to-image-v1.1.0-9350cd1-linux-amd64.tar.gz -o /tmp/origin/source-to-image.tar.gz
+    tar -xvzf /tmp/origin/source-to-image.tar.gz -C ${__dir}
+    pushd ${__dir}
+    for i in `ls *`
+    do
+      mv -f ${i} ${__CONFIG_DIR}/bin
+      ln -s ${__CONFIG_DIR}/bin/${i} /usr/bin/ > /dev/null 2>&1
+      echo "[INFO] Link created for ${i}"
+    done
+    popd
+
+    # Add bash completions
+    mkdir -p ${__CONFIG_DIR}/bin/bash
+    pushd ${__CONFIG_DIR}/bin/bash
+    curl -skL https://raw.githubusercontent.com/${__OS_ORIGIN_REPO}/origin/${__OS_ORIGIN_BRANCH}/contrib/completions/bash/oc -o oc
+    curl -skL https://raw.githubusercontent.com/${__OS_ORIGIN_REPO}/origin/${__OS_ORIGIN_BRANCH}/contrib/completions/bash/oadm -o oadm
+    curl -skL https://raw.githubusercontent.com/${__OS_ORIGIN_REPO}/origin/${__OS_ORIGIN_BRANCH}/contrib/completions/bash/openshift -o openshift
+    for i in `ls *`
+    do
+      echo "[INFO] Adding bash_completion for ${i}"
+      ln -s ${__CONFIG_DIR}/bin/bash/${i} /etc/bash_completion.d/ > /dev/null 2>&1
+    done
+    popd
+
+    # Download clients
+    mkdir -p ${__CONFIG_DIR}/bin/clients
+    pushd ${__CONFIG_DIR}/bin/clients
+    for i in `cat /tmp/origin-release.json | jq '.assets[].browser_download_url' | grep client | sed -e 's/^"//'  -e 's/"$//'`
+    do
+       echo "[INFO] Downloading client ${i}"
+       echo "curl -kL -O ${i}"
+       curl -kL -O ${i}
+    done
+    popd
+
+#    rm -rf /tmp/origin*
+    [ ! -e "/usr/bin/openshift" ] && "[ERROR] Openshift could not be properly installed" && exit 1
 }
 
 openshift-profile-setup(){
@@ -204,7 +275,8 @@ registry-setup(){
     oc adm policy add-scc-to-user privileged system:serviceaccount:default:registry
     oc adm registry --service-account=registry \
                     --config=${__CONFIG_DIR}/openshift.local.config/master/admin.kubeconfig \
-                    --mount-host=/opt/registry
+                    --mount-host=/opt/registry \
+                    --latest-images="$([ ${__OS_IMAGES_VERSION} = 'latest' ] && echo 'true' || echo 'false')"
 
     # TODO: Secure the registry (https://docs.openshift.org/latest/install_config/install/docker_registry.html)
     oc expose service docker-registry --hostname "hub.${__OS_PUBLIC_IP}"
@@ -220,7 +292,9 @@ router-setup(){
     echo "[INFO] Creating the OpenShift Router"
     oc adm policy add-scc-to-user hostnetwork system:serviceaccount:default:router
     ## Create the router
-    oc adm router --create --service-account=router
+    oc adm router --create
+                  --service-account=router \
+                  --latest-images="$([ ${__OS_IMAGES_VERSION} = 'latest' ] && echo 'true' || echo 'false')"
 
     marker_create "origin.router"
   fi
@@ -252,6 +326,9 @@ cockpit-setup(){
    if marker_check "origin.cockpit"; then
       echo "[INFO] Creating cockpit as administrative project"
       oc adm new-project cockpit
+      # Template is made generic, so that __OS_APPS_DOMAIN get's properly replaced if customized
+      sed -i.orig -e "s/#ORIGIN_IP#/${__OS_PUBLIC_IP}/g" /scripts/cockpit/cockpit.json
+      sed -i.orig -e "s/#COCKPIT_DOMAIN#/cockpit.${__OS_APPS_DOMAIN}/g" /scripts/cockpit/cockpit.json
       oc create -f /scripts/cockpit/cockpit.json -n cockpit
       echo "[INFO] Cockpit is available at http://cockpit.${__OS_APPS_DOMAIN}"
 
@@ -326,10 +403,10 @@ nfs-setup(){
     chmod 755 /scripts/nfs/create-nfs-volume
     ln -s /scripts/nfs/create-nfs-volume /usr/local/bin/create-nfs-volume
 
-    echo "[INFO] Creating 10 NFS PV"
-    for i in {01..10}
+    echo "[INFO] Creating ${__OS_PV_COUNT} NFS PV"
+    for i in $(seq -w 01 ${__OS_PV_COUNT})
     do
-       /scripts/nfs/create-nfs-volume "pv${i}"
+       /scripts/nfs/create-nfs-volume "pv${i}" "${__OS_PV_SIZE}" "${__OS_PV_NFS_OPTIONS}"
     done
 
     marker_create "origin.nfs"

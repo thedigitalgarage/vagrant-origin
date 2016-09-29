@@ -8,15 +8,18 @@
 VAGRANTFILE_API_VERSION = "2"
 Vagrant.require_version ">= 1.7.2"
 
-VM_MEM = ENV['ORIGIN_VM_MEM'] || 4096 # Memory used for the VM
+VM_MEM = ENV['ORIGIN_VM_MEM'] || 6144 # Memory used for the VM
 HOSTNAME = "origin"
 
 Vagrant.configure(2) do |config|
 
+   # This vm can be created both for centos or fedora
    config.vm.box = "centos/7" 
+   # config.vm.box = "fedora/23-cloud-base"
    config.vm.box_check_update = false
    config.vm.network "private_network", ip: "10.2.2.2"
    config.vm.synced_folder ".", "/vagrant", disabled: true
+   config.vm.synced_folder ".", "/home/vagrant/sync", disabled: true
    if Vagrant::Util::Platform.windows?
       config.vm.synced_folder "config", "/config"
       config.vm.synced_folder "scripts", "/scripts"
